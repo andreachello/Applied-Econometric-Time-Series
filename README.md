@@ -1,6 +1,6 @@
 # Applied Econometric Time-Series
 
-Repository for my Econometrics course for the MSc Financial Engineering at WQU.
+A repository to explore the concepts of appled econometrics in the context of financial time-series.
 
 ## 1. Basic Statistics
 
