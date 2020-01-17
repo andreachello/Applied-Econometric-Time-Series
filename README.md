@@ -1,6 +1,6 @@
 # Applied Econometric Time-Series
 
-A repository to explore the concepts of appled econometrics in the context of financial time-series.
+A repository to explore the concepts of applied econometrics in the context of financial time-series.
 
 ## 1. Basic Statistics
 
