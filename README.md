@@ -1,4 +1,4 @@
-# Applied-Econometric-Time-Series
+# Applied Econometric Time-Series
 
 Repository for my Econometrics course for the MSc Financial Engineering at WQU.
 
