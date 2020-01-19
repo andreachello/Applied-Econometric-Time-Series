@@ -1,0 +1,189 @@
+
+# ---------------------------------------------------------------------------------------
+
+#                         Evaluation of Univariate Time Series
+
+# ---------------------------------------------------------------------------------------
+
+" We will attempt to model the US CPI inflation rate in compounded annual rate of
+change. You can download this data in Microsoft Excel from
+https://fred.stlouisfed.org/series/CPIAUCSL. Use “EDIT GRAPH” and change the “Units”
+to “Percent Change from Year Ago”. We will use the monthly data from the 1st of
+January 1970 to the 1st of January 2018. (This can be adjusted on the main graph
+window before clicking “DOWNLOAD”.)
+"
+
+library(tidyverse)
+library(stats)
+library(readxl)
+library(tseries)
+library(forecast)
+
+# Load the infalation data
+
+inflation <- read_excel("Econometrics WQU/Module 3/CPIAUCSL.xls", sheet = "FRED Graph",
+                        col_names = T, 
+                        col_types = c("date", "numeric"), 
+                        skip = 10)
+
+# -------------------------------------------
+
+#        Visualisation
+
+# -------------------------------------------
+
+ggplot(data = inflation, mapping = aes(x = observation_date, y = CPIAUCSL_PC1)) +
+  geom_line(color = "darkblue") + labs(x = "", y = "CPI Inflation - compounded annual rate of change")
+
+## The process as a whole appears non-stationary: There is no obvious mean over the sample
+## The process seems to be trending downwards
+
+" Considerations:
+  
+  1970s: High and variable inflation partly due to the oil shocks
+  Currently: US Federal Reserve Bank Inflation rate stable at a 2%
+  Therefore we could be looking at two completely different Data Generating Processes"
+
+# ------------------
+#  Autocorrelation
+# ------------------
+
+## To show how different the process is in its early and later phases --> truncate the data at beg of 1992
+
+# Convert the data frame to a time series object
+
+CPI_percent_change <- ts(inflation$CPIAUCSL_PC1, start=1970, frequency = 12)
+
+# Truncate the time series object
+
+CPI_percent_change_truncated <- window(CPI_percent_change, start = 1992)
+
+acf(CPI_percent_change)
+" The zero-th autocorrelation is alwyas 1 - a variable is alwyas perfectly corr with itself
+## The ACF of the whole sample of the inflation variabele is typcial of a non-stationary process:
+## Auto-correlations are very close to 1 and slowly fade
+## A shock in some months will still have an impact on the current level more than two years into 
+## the future (Oil crisis 1973)
+"
+acf(CPI_percent_change_truncated)
+
+"
+  The ACF for the truncated time series is more typical of a somewhat persistent stationary process:
+  A rapidly ACF (suggesting further evidence that the time series behaviour has changed over time)
+"
+
+# --------------------------
+#  Partial Autocorrelation
+# --------------------------
+
+
+pacf(CPI_percent_change)
+pacf(CPI_percent_change_truncated)
+
+" There seems to be no substansive difference in the PACFs of the two processes
+  There is a strong impact of the first lag (PACF by default drops the 0th lag)
+  There is strong negative impact on the second lag which is conditional on the first
+  There is strong impact of the 13th lag
+  Several other lags are just barely significant
+  An AR model may be useful but no significant conclusion although the AR must have significant lags 
+  to capture the time series  properties of the data."
+
+
+# -------------------------------------------
+
+#        Formal Tests for Stationarity
+
+# -------------------------------------------
+
+# --------------------------------
+#  Augmented Dickey-Fuller Tests:
+# --------------------------------
+
+"Hypothesis tested:
+  The first part is non-stationary enough to make the whole process non-stationary
+  The second part is stationary"
+
+adf.test(CPI_percent_change)
+## p-value greater than 1% -> do not reject the null of non-stationarity == NON-STATIONARY
+adf.test(CPI_percent_change_truncated)
+## p-value less than 1% -> reject the null of non-stationarity == STATIONARY
+
+# -----------------
+#    KPSS Test
+# -----------------
+
+kpss.test(CPI_percent_change)
+kpss.test(CPI_percent_change_truncated)
+
+## They both reject the H0 of stationarity
+
+# -------------------------------------------
+
+#        Fitting and Evaluating Models
+
+# -------------------------------------------
+
+# ---------------
+#  High Order AR
+# ---------------
+
+" Fit a simple AR model with 12 lags, no differencing, no moving average terms
+ ----> ARIMA(12,0,0) on the time frame 1990-2013"
+
+AR_model <- arima(window(CPI_percent_change,start = 1990, end = 2013), order = c(12,0,0), method = "ML")
+summary(AR_model)
+## None of the coefficients are statistically significant (not a parsimonious model)
+
+# THE AR MODEL IS NOT SUFFICIENT
+
+# ---------------
+#  Box-Pierce
+# ---------------
+
+" The Box=Pierce test is one of a range of tests for serial correlation.
+  If the case would be that all the autocorrelations of a process up to lag 12
+  were zero the error terms are white noise"
+
+Box.test(AR_model$residuals, lag = 12)
+
+## Here we reject the H0 that the errors are white noise and therefore there is persistence
+## or too much autocorrelation in inflation to be captured by a simple AR model
+
+# THERE IS PERSISTENCE IN THE RESIDUALS THERFORE MUST INCLUDE AN MA PROCESS
+
+# ---------------
+#     ARIMA
+# ---------------
+
+ARIMA_model <- arima(window(CPI_percent_change, start = 1990, end =2013), order = c(12,2,2),
+                     method = "ML")
+summary(ARIMA_model)
+
+"## Some of the coefficients are significant, the SE being 2x smaller
+The residuals tests as white noise at a 5% level. This is still not a parsimonious model,
+as there are many insignificant coefficients to zero. In practice, it can be very hard to
+find a good single equation model for a time series this persistent with such different
+behavior over time. 
+"
+
+# -------------------------------------------
+
+#                  Forecasting
+
+# -------------------------------------------
+
+AR_model <- ar(window(CPI_percent_change, start = 1990, end = 2013), order = 12,
+               method = "mle")
+AR_forecast <- predict(AR_model, n.ahead = 72, se.fit = TRUE)
+
+## AR_forecast contains predicted value of the series and the SE of the forecast
+
+plot(window(CPI_percent_change, start=1992))
+lines(AR_forecast$pred, col = "blue")
+lines(AR_forecast$pred + 2 *AR_forecast$se, col = "cornflowerblue", lty = "dashed")
+lines(AR_forecast$pred - 2 * AR_forecast$se, col = "cornflowerblue", lty = "dashed")
+
+"As expected, this is not a very strong model. It
+seems to get the mean right, but with a very large amount of uncertainty around it.
+With a series as persistent as this, containing periods of such large volatility, we cannot
+expect simple time series models to work well. "
